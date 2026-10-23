@@ -160,3 +160,33 @@ test("a fresh deploy skips the TTL check and proceeds to the deploy path", async
   await assert.rejects(() => run(server), /getAccount reached/);
   assert.equal(calls.reads, 1);
 });
+
+for (const bad of [-1, 1.5, NaN]) {
+  test(`an invalid minimum window (${bad}) fails before any RPC call, even on a fresh deploy`, async () => {
+    const { server, calls } = makeServer({ instancePresent: false });
+    await assert.rejects(
+      () => run(server, { minTtlLedgers: bad }),
+      /Invalid minimum contract TTL window/,
+    );
+    assert.equal(calls.reads, 0);
+    assert.equal(calls.mutations, 0);
+  });
+}
+
+test("runMeasurement rejects an invalid minTtlLedgers before reading fixtures or touching the network", async (t) => {
+  const { runMeasurement } = require("../dist/measurement");
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("network reached");
+  });
+  await assert.rejects(
+    () =>
+      runMeasurement({
+        fixturesPath: "/nonexistent/fixtures.json",
+        gitCommit: "test",
+        sdkVersion: "test",
+        minTtlLedgers: -1,
+      }),
+    /Invalid minimum contract TTL window/,
+  );
+  assert.equal(fetchMock.mock.callCount(), 0);
+});

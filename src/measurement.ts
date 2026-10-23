@@ -667,6 +667,13 @@ export function resolveContractWasmPath(
  *  benchmark is invoked. 17,280 ledgers is about one day at 5s per ledger. */
 export const DEFAULT_MIN_CONTRACT_TTL_LEDGERS = 17_280;
 
+/** Reject an unusable minimum TTL window before any network work. */
+export function assertValidMinTtl(value: unknown): void {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid minimum contract TTL window: ${String(value)}`);
+  }
+}
+
 export function assertReusableTtl(args: {
   label: string;
   contractId: string;
@@ -676,9 +683,7 @@ export function assertReusableTtl(args: {
 }): void {
   const { label, contractId, liveUntilLedgerSeq, latestLedger, minTtlLedgers } =
     args;
-  if (!Number.isInteger(minTtlLedgers) || minTtlLedgers < 0) {
-    throw new Error(`Invalid minimum contract TTL window: ${minTtlLedgers}`);
-  }
+  assertValidMinTtl(minTtlLedgers);
   if (
     typeof liveUntilLedgerSeq !== "number" ||
     typeof latestLedger !== "number"
@@ -744,6 +749,9 @@ export async function ensureContractDeployed(options: {
 >>>>>>> bbfdcd9 (fix(measurement): reject reused contracts close to TTL expiry (#221))
   const { server, deployer, deployerAddress, wasmBytes, wasmHash, salt } =
     options;
+  if (options.minTtlLedgers !== undefined) {
+    assertValidMinTtl(options.minTtlLedgers);
+  }
   const probe = await probeContractInstance(server, options.contractId);
   if (probe.deployed) {
     const minTtlLedgers =
@@ -1087,6 +1095,12 @@ export async function runMeasurement(
 
   if (opts.signal?.aborted) {
     throw opts.signal.reason || new Error("Measurement cancelled by caller");
+  }
+
+  // Reject an unusable TTL window before reading fixtures, creating a key or
+  // touching the network.
+  if (opts.minTtlLedgers !== undefined) {
+    assertValidMinTtl(opts.minTtlLedgers);
   }
 
   const effectiveRpcUrl = opts.rpcUrl ?? DEFAULT_RPC_URL;

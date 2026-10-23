@@ -54733,11 +54733,14 @@ async function probeContractInstance(server, contractId) {
   }
 }
 var DEFAULT_MIN_CONTRACT_TTL_LEDGERS = 17280;
+function assertValidMinTtl(value) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid minimum contract TTL window: ${String(value)}`);
+  }
+}
 function assertReusableTtl(args) {
   const { label, contractId, liveUntilLedgerSeq, latestLedger, minTtlLedgers } = args;
-  if (!Number.isInteger(minTtlLedgers) || minTtlLedgers < 0) {
-    throw new Error(`Invalid minimum contract TTL window: ${minTtlLedgers}`);
-  }
+  assertValidMinTtl(minTtlLedgers);
   if (typeof liveUntilLedgerSeq !== "number" || typeof latestLedger !== "number") {
     throw new Error(
       `Deployment probe returned no TTL metadata for the ${label} of ${contractId}; cannot verify the ${minTtlLedgers}-ledger minimum window`
@@ -54772,6 +54775,9 @@ async function probeContractCode(server, wasmHash, contractId) {
 }
 async function ensureContractDeployed(options) {
   const { server, deployer, deployerAddress, wasmBytes, wasmHash, salt } = options;
+  if (options.minTtlLedgers !== void 0) {
+    assertValidMinTtl(options.minTtlLedgers);
+  }
   const probe = await probeContractInstance(server, options.contractId);
   if (probe.deployed) {
     const minTtlLedgers = options.minTtlLedgers ?? DEFAULT_MIN_CONTRACT_TTL_LEDGERS;
@@ -54964,6 +54970,9 @@ async function runMeasurement(fixturesPathOrOptions, gitCommit, sdkVersion, rpcU
   }
   if (opts.signal?.aborted) {
     throw opts.signal.reason || new Error("Measurement cancelled by caller");
+  }
+  if (opts.minTtlLedgers !== void 0) {
+    assertValidMinTtl(opts.minTtlLedgers);
   }
   const effectiveRpcUrl = opts.rpcUrl ?? DEFAULT_RPC_URL;
   const fixturesDir = path3.dirname(path3.resolve(opts.fixturesPath));
